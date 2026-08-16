@@ -126,7 +126,7 @@ canvas.mini{display:block}
   </div>
 
   <div id="boardWrap"><canvas id="board"></canvas></div>
-  <p class="note">📱 드래그 이동 · 탭 회전(왼쪽 ¼은 반시계) · 아래로 플릭 = 하드드롭 · 위로 플릭 = 홀드<br>⌨️ ←→ 이동 · ↓ 소프트드롭 · ↑/X 회전 · Z 반시계 · 스페이스 하드드롭 · C 홀드 · P 일시정지 · v1</p>
+  <p class="note">📱 드래그 이동 · 탭 회전(왼쪽 ¼은 반시계) · 아래로 플릭 = 하드드롭 · 위로 플릭 = 홀드<br>⌨️ ←→ 이동 · ↓ 소프트드롭 · ↑/X 회전 · Z 반시계 · 스페이스 하드드롭 · C 홀드 · P 일시정지 · 고스트는 레벨 1까지만 · v2</p>
 </main>
 
 <div id="overlay" class="hidden">
@@ -517,8 +517,9 @@ function render(now) {
   }
   const p = game.current;
   if (p && !game.over) {
+    // 고스트(랜딩 가이드)는 레벨 1 한정 — 레벨 2부터는 실력으로
     const gy = game.ghostY();
-    if (gy !== p.y) {
+    if (game.level <= 1 && gy !== p.y) {
       for (const [cx, cy] of game.cells(p.t, p.r, p.x, gy)) {
         if (cy >= HIDDEN) drawBlock(ctx, cx * cell, (cy - HIDDEN) * cell, cell, PIECES[p.t].idx, 0.4, true);
       }
@@ -659,7 +660,12 @@ function afterLock(res) {
   } else {
     Sound.lock();
   }
-  if (res.levelUp) { Sound.levelUp(); flashStatus('⚡ 레벨 ' + game.level + '! 더 빨라짐'); }
+  if (res.levelUp) {
+    Sound.levelUp();
+    flashStatus(game.level === 2
+      ? '⚡ 레벨 2! 이제부터 랜딩 가이드 없음 ㅋ'
+      : '⚡ 레벨 ' + game.level + '! 더 빨라짐');
+  }
   updateHud();
   drawMinis();
   if (game.over) doGameOver();

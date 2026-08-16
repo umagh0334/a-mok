@@ -32,7 +32,8 @@ h1{font-size:24px;letter-spacing:2px;user-select:none;-webkit-user-select:none;-
 .dot.black{background:radial-gradient(circle at 35% 30%,#777,#000)}
 .dot.white{background:radial-gradient(circle at 35% 30%,#fff,#b9b6aa)}
 .dot.draw{background:linear-gradient(135deg,#555,#ddd)}
-#moveNum{color:var(--sub);font-weight:500;font-size:13px}
+/* 수순이 세 자리가 돼도 폭 고정 (최대 225수) */
+#moveNum{color:var(--sub);font-weight:500;font-size:13px;display:inline-block;min-width:3em;white-space:nowrap;font-variant-numeric:tabular-nums}
 .controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 select,button{
   font:inherit;font-size:13px;color:var(--ink);background:#3b2f1d;border:1px solid var(--line);

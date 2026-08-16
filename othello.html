@@ -32,8 +32,11 @@ h1{font-size:24px;letter-spacing:2px;user-select:none;-webkit-user-select:none}
 .dot.black{background:radial-gradient(circle at 35% 30%,#777,#000)}
 .dot.white{background:radial-gradient(circle at 35% 30%,#fff,#b9b6aa)}
 .dot.draw{background:linear-gradient(135deg,#555,#ddd)}
-#score{color:var(--sub);font-weight:600;font-size:14px}
-#score b{color:var(--ink)}
+#score{color:var(--sub);font-weight:600;font-size:14px;white-space:nowrap}
+/* 점수가 한 자리→두 자리로 바뀌어도 폭 고정 (최대 64라 2ch면 충분) */
+#score b{color:var(--ink);display:inline-block;min-width:2ch;font-variant-numeric:tabular-nums}
+#scoreB{text-align:right}
+#scoreW{text-align:left}
 .controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 select,button{
   font:inherit;font-size:13px;color:var(--ink);background:#25382c;border:1px solid var(--line);

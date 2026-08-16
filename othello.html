@@ -14,6 +14,7 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;
   background:radial-gradient(1100px 700px at 50% -10%,var(--bg1),var(--bg2));
   color:var(--ink);min-height:100vh;display:flex;justify-content:center;padding:14px;
+  overflow-x:hidden; /* 종료 셰이크 때 캔버스가 화면 밖으로 나가도 가로 스크롤 방지 */
 }
 main{width:100%;max-width:640px}
 header{display:flex;align-items:baseline;gap:10px;margin:2px 4px 12px}
@@ -113,7 +114,7 @@ canvas{
 
   <div id="status">&nbsp;</div>
   <div id="boardWrap"><canvas id="board"></canvas></div>
-  <p class="note">흑 선공 · 상대 돌을 끼우면 전부 뒤집힘 · 둘 곳 없으면 자동 패스 · 최종 돌 수로 승부</p>
+  <p class="note">흑 선공 · 상대 돌을 끼우면 전부 뒤집힘 · 둘 곳 없으면 자동 패스 · 최종 돌 수로 승부 · v3</p>
 </main>
 
 <div id="overlay" class="hidden">

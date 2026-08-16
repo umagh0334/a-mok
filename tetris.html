@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>테트리스 · Tetris</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg1:#232a4d;--bg2:#0d1022;--card:#1c2240;--line:#323b66;
+  --ink:#e9ecfb;--sub:#96a0c9;--accent:#7c9bff;--warn:#ff7a66;
+}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;
+  background:radial-gradient(1100px 700px at 50% -10%,var(--bg1),var(--bg2));
+  color:var(--ink);min-height:100vh;display:flex;justify-content:center;padding:14px;
+  overflow-x:hidden;overscroll-behavior:none;
+}
+main{width:100%;max-width:640px}
+header{display:flex;align-items:baseline;gap:10px;margin:2px 4px 12px}
+.home{color:var(--sub);text-decoration:none;font-size:15px;padding-right:2px}
+.home:hover{color:var(--ink)}
+h1{font-size:24px;letter-spacing:2px;user-select:none;-webkit-user-select:none}
+.tag{color:var(--sub);font-size:13px}
+.toolbar{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+  background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
+}
+/* 상태/점수 2행 분리 + 폭·높이 고정 (레이아웃 시프트 방지) */
+.info{display:flex;flex-direction:column;gap:3px;width:11em;flex:none;overflow:hidden}
+.turn{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;height:22px;white-space:nowrap}
+.dot{width:18px;height:18px;border-radius:5px;flex:none;background:linear-gradient(145deg,#8fb0ff,#5470d6);box-shadow:0 1px 3px rgba(0,0,0,.5)}
+#scoreRow{color:var(--sub);font-weight:600;font-size:14px;height:18px;line-height:18px;white-space:nowrap}
+#scoreRow b{color:var(--ink);font-variant-numeric:tabular-nums}
+.controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+select,button{
+  font:inherit;font-size:13px;color:var(--ink);background:#252d52;border:1px solid var(--line);
+  border-radius:8px;padding:7px 10px;cursor:pointer;-webkit-appearance:none;appearance:none;
+}
+select:hover,button:hover{border-color:#4c5a94}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0c1230;font-weight:700}
+button:disabled{opacity:.4;cursor:default}
+#status{min-height:22px;font-size:13px;color:var(--sub);margin:8px 6px 6px}
+#status.warn{color:var(--warn);font-weight:600}
+#hud{display:flex;gap:10px;margin:0 0 10px;align-items:stretch}
+.miniBox{
+  background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+}
+.miniBox .lbl{font-size:10px;color:var(--sub);letter-spacing:1.5px;font-weight:700}
+.miniBox.stats{flex:1;flex-direction:row;justify-content:space-around;font-size:13px;color:var(--sub);white-space:nowrap}
+.miniBox.stats b{color:var(--ink);font-variant-numeric:tabular-nums;display:inline-block;min-width:2.2ch;text-align:right}
+canvas.mini{display:block}
+#boardWrap{display:flex;justify-content:center}
+#board{
+  display:block;border-radius:8px;cursor:pointer;
+  box-shadow:0 14px 40px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);
+  touch-action:none;-webkit-tap-highlight-color:transparent;
+}
+.note{color:var(--sub);font-size:12px;text-align:center;margin:12px 0 4px;line-height:1.7}
+#overlay{
+  position:fixed;inset:0;background:rgba(4,6,18,.6);backdrop-filter:blur(3px);
+  display:flex;align-items:center;justify-content:center;z-index:10;
+}
+#overlay.hidden{display:none}
+.modal{
+  background:#222950;border:1px solid #3f4a7f;border-radius:16px;padding:30px 36px;text-align:center;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);animation:pop .2s ease;
+}
+@keyframes pop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+.modal .cube{
+  width:44px;height:44px;margin:0 auto 14px;border-radius:10px;
+  background:linear-gradient(145deg,#8fb0ff,#5470d6);
+  animation:winpop .55s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes winpop{from{transform:scale(0)}to{transform:scale(1)}}
+.modal h2{font-size:22px;margin-bottom:6px}
+.modal p{color:var(--sub);font-size:14px;margin-bottom:20px;line-height:1.6}
+.modal .row{display:flex;gap:8px;justify-content:center}
+@media (max-width:520px){.toolbar{justify-content:center}h1{font-size:20px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <a class="home" href="./">←</a>
+    <h1>테트리스</h1><span class="tag">Tetris · 10×20</span>
+  </header>
+
+  <div class="toolbar">
+    <div class="info">
+      <div class="turn">
+        <span class="dot"></span>
+        <span id="stateText">플레이 중</span>
+      </div>
+      <div id="scoreRow"><b id="scoreEl">0</b>점</div>
+    </div>
+    <div class="controls">
+      <select id="startLevelSel" title="시작 레벨">
+        <option value="1" selected>레벨 1</option>
+        <option value="5">레벨 5</option>
+        <option value="9">레벨 9</option>
+      </select>
+      <button id="soundBtn" title="효과음 켜기/끄기">🔊</button>
+      <button id="pauseBtn" title="일시정지">⏸</button>
+      <button id="newBtn" class="primary">새 게임</button>
+    </div>
+  </div>
+
+  <div id="status">&nbsp;</div>
+
+  <div id="hud">
+    <div class="miniBox">
+      <span class="lbl">HOLD</span>
+      <canvas id="holdCv" class="mini"></canvas>
+    </div>
+    <div class="miniBox stats">
+      <span>레벨 <b id="levelEl">1</b></span>
+      <span><b id="linesEl">0</b>줄</span>
+      <span>최고 <b id="bestEl" style="min-width:5ch">0</b></span>
+    </div>
+    <div class="miniBox">
+      <span class="lbl">NEXT</span>
+      <canvas id="nextCv" class="mini"></canvas>
+    </div>
+  </div>
+
+  <div id="boardWrap"><canvas id="board"></canvas></div>
+  <p class="note">📱 드래그 이동 · 탭 회전(왼쪽 ¼은 반시계) · 아래로 플릭 = 하드드롭 · 위로 플릭 = 홀드<br>⌨️ ←→ 이동 · ↓ 소프트드롭 · ↑/X 회전 · Z 반시계 · 스페이스 하드드롭 · C 홀드 · P 일시정지 · v1</p>
+</main>
+
+<div id="overlay" class="hidden">
+  <div class="modal">
+    <div class="cube"></div>
+    <h2 id="modalTitle">게임 오버</h2>
+    <p id="modalDesc"></p>
+    <div class="row">
+      <button id="modalClose">판 보기</button>
+      <button id="modalNew" class="primary">새 게임</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ===================== 게임 로직 (렌더링과 분리) ===================== */
+
+const W = 10, H = 22, HIDDEN = 2; // 위 2행은 스폰용 히든 영역
+const TYPES = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+const BASE = {
+  I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+  J: [[1,0,0],[1,1,1],[0,0,0]],
+  L: [[0,0,1],[1,1,1],[0,0,0]],
+  O: [[1,1],[1,1]],
+  S: [[0,1,1],[1,1,0],[0,0,0]],
+  T: [[0,1,0],[1,1,1],[0,0,0]],
+  Z: [[1,1,0],[0,1,1],[0,0,0]],
+};
+function rotCW(m) {
+  const n = m.length;
+  return Array.from({ length: n }, (_, y) => Array.from({ length: n }, (_, x) => m[n - 1 - x][y]));
+}
+const PIECES = {};
+TYPES.forEach((t, i) => {
+  let m = BASE[t];
+  const rots = [];
+  for (let r = 0; r < 4; r++) {
+    const cells = [];
+    m.forEach((row, y) => row.forEach((v, x) => { if (v) cells.push([x, y]); }));
+    rots.push(cells);
+    m = rotCW(m);
+  }
+  PIECES[t] = { rots, size: BASE[t].length, idx: i + 1 };
+});
+
+// SRS 월킥 테이블 (표기상 +y는 위쪽 → 적용 시 y에서 뺀다)
+const KICKS_JLSTZ = {
+  '0>1': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]], '1>0': [[0,0],[1,0],[1,-1],[0,2],[1,2]],
+  '1>2': [[0,0],[1,0],[1,-1],[0,2],[1,2]],     '2>1': [[0,0],[-1,0],[-1,1],[0,-2],[-1,-2]],
+  '2>3': [[0,0],[1,0],[1,1],[0,-2],[1,-2]],    '3>2': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],
+  '3>0': [[0,0],[-1,0],[-1,-1],[0,2],[-1,2]],  '0>3': [[0,0],[1,0],[1,1],[0,-2],[1,-2]],
+};
+const KICKS_I = {
+  '0>1': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],   '1>0': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],
+  '1>2': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],   '2>1': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],
+  '2>3': [[0,0],[2,0],[-1,0],[2,1],[-1,-2]],   '3>2': [[0,0],[-2,0],[1,0],[-2,-1],[1,2]],
+  '3>0': [[0,0],[1,0],[-2,0],[1,-2],[-2,1]],   '0>3': [[0,0],[-1,0],[2,0],[-1,2],[2,-1]],
+};
+
+class Game {
+  constructor(rng) { this.rng = rng || Math.random; this.reset(1); }
+  reset(startLevel) {
+    this.grid = Array.from({ length: H }, () => new Array(W).fill(0));
+    this.queue = [];
+    this.hold = null;
+    this.canHold = true;
+    this.score = 0;
+    this.lines = 0;
+    this.startLevel = startLevel;
+    this.level = startLevel;
+    this.over = false;
+    this.current = null;
+    this.bagFill();
+    this.spawn();
+  }
+  // 7-bag: 7종을 한 봉지로 섞어서 뽑음
+  bagFill() {
+    while (this.queue.length < 5) {
+      const bag = TYPES.slice();
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(this.rng() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      this.queue.push(...bag);
+    }
+  }
+  spawn(type) {
+    const t = type || this.queue.shift();
+    this.bagFill();
+    // y=1: 스폰 즉시 조각 아랫부분이 보이는 영역에 걸침
+    const p = { t, r: 0, x: Math.floor((W - PIECES[t].size) / 2), y: 1 };
+    this.current = p;
+    if (this.collides(p.t, p.r, p.x, p.y)) { this.over = true; }
+  }
+  cells(t, r, x, y) { return PIECES[t].rots[r].map(([cx, cy]) => [x + cx, y + cy]); }
+  collides(t, r, x, y) {
+    for (const [gx, gy] of this.cells(t, r, x, y)) {
+      if (gx < 0 || gx >= W || gy < 0 || gy >= H) return true;
+      if (this.grid[gy][gx]) return true;
+    }
+    return false;
+  }
+  tryMove(dx, dy) {
+    const p = this.current;
+    if (this.over || !p || this.collides(p.t, p.r, p.x + dx, p.y + dy)) return false;
+    p.x += dx; p.y += dy;
+    return true;
+  }
+  rotate(dir) {
+    const p = this.current;
+    if (this.over || !p) return false;
+    if (p.t === 'O') return true; // O는 회전해도 동일
+    const to = (p.r + dir + 4) % 4;
+    const table = p.t === 'I' ? KICKS_I : KICKS_JLSTZ;
+    for (const [kx, ky] of table[p.r + '>' + to]) {
+      if (!this.collides(p.t, to, p.x + kx, p.y - ky)) {
+        p.r = to; p.x += kx; p.y -= ky;
+        return true;
+      }
+    }
+    return false;
+  }
+  grounded() {
+    const p = this.current;
+    return p ? this.collides(p.t, p.r, p.x, p.y + 1) : false;
+  }
+  softStep() { if (this.tryMove(0, 1)) { this.score += 1; return true; } return false; }
+  ghostY() {
+    const p = this.current;
+    let y = p.y;
+    while (!this.collides(p.t, p.r, p.x, y + 1)) y++;
+    return y;
+  }
+  hardDrop() {
+    const p = this.current;
+    const gy = this.ghostY();
+    this.score += (gy - p.y) * 2;
+    p.y = gy;
+    return this.lockNow();
+  }
+  lockNow() {
+    const p = this.current;
+    let lockOut = true;
+    for (const [gx, gy] of this.cells(p.t, p.r, p.x, p.y)) {
+      this.grid[gy][gx] = PIECES[p.t].idx;
+      if (gy >= HIDDEN) lockOut = false;
+    }
+    const rows = [];
+    for (let y = 0; y < H; y++) if (this.grid[y].every(v => v)) rows.push(y);
+    const prevLevel = this.level;
+    if (rows.length) {
+      for (const y of rows) { this.grid.splice(y, 1); this.grid.unshift(new Array(W).fill(0)); }
+      this.score += [0, 100, 300, 500, 800][rows.length] * this.level;
+      this.lines += rows.length;
+      this.level = this.startLevel + Math.floor(this.lines / 10);
+    }
+    this.canHold = true;
+    if (lockOut) { this.over = true; this.current = null; }
+    else this.spawn();
+    return { cleared: rows.length, rows, levelUp: this.level > prevLevel, over: this.over };
+  }
+  holdSwap() {
+    if (this.over || !this.canHold || !this.current) return false;
+    const cur = this.current.t;
+    this.canHold = false;
+    if (this.hold) { const h = this.hold; this.hold = cur; this.spawn(h); }
+    else { this.hold = cur; this.spawn(); }
+    return true;
+  }
+}
+
+// 낙하 속도: 가이드라인 공식 (레벨당 지수적으로 빨라짐)
+function gravityMs(lv) {
+  return Math.max(30, Math.pow(0.8 - (lv - 1) * 0.007, lv - 1) * 1000);
+}
+
+/* ===================== 사운드 (Web Audio 합성) ===================== */
+
+const Sound = (() => {
+  let ac = null, master = null;
+  let enabled = true;
+  try { enabled = localStorage.getItem('tetris-sound') !== 'off'; } catch (e) {}
+
+  function ctx() {
+    if (!ac) {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      master = ac.createGain();
+      master.gain.value = 0.65;
+      const comp = ac.createDynamicsCompressor();
+      comp.threshold.value = -12; comp.knee.value = 20; comp.ratio.value = 8;
+      comp.attack.value = 0.002; comp.release.value = 0.15;
+      master.connect(comp).connect(ac.destination);
+    }
+    if (ac.state === 'suspended') ac.resume();
+    return ac;
+  }
+  function env(node, t, vol, dur) {
+    const g = ac.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    node.connect(g).connect(master);
+  }
+  function blip(freq, vol, dur, type) {
+    if (!enabled) return;
+    const a = ctx(), t = a.currentTime;
+    const o = a.createOscillator();
+    o.type = type || 'square';
+    o.frequency.value = freq;
+    env(o, t, vol, dur);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function thud(freqTop, vol) {
+    if (!enabled) return;
+    const a = ctx(), t = a.currentTime;
+    const o = a.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freqTop, t);
+    o.frequency.exponentialRampToValueAtTime(freqTop * 0.4, t + 0.08);
+    env(o, t, vol, 0.1);
+    o.start(t); o.stop(t + 0.12);
+    const n = Math.round(a.sampleRate * 0.03);
+    const buf = a.createBuffer(1, n, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 2;
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    const lp = a.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 900;
+    src.connect(lp);
+    env(lp, t, vol * 0.8, 0.05);
+    src.start(t);
+  }
+  function melody(steps, dur, type, vol) {
+    if (!enabled) return;
+    const a = ctx(), t0 = a.currentTime;
+    steps.forEach((s, i) => {
+      const freqs = Array.isArray(s) ? s : [s];
+      const t = t0 + i * dur;
+      const ring = (i === steps.length - 1 ? 4 : 1.8) * dur;
+      for (const f of freqs) {
+        const o = a.createOscillator();
+        o.type = type; o.frequency.value = f;
+        env(o, t, vol / Math.sqrt(freqs.length), ring);
+        o.start(t); o.stop(t + ring + 0.05);
+      }
+    });
+  }
+  function boom() {
+    if (!enabled) return;
+    const a = ctx(), t = a.currentTime;
+    const o = a.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+    const sh = a.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) curve[i] = Math.tanh((i / 128 - 1) * 4);
+    sh.curve = curve;
+    o.connect(sh);
+    env(sh, t, 0.9, 0.4);
+    o.start(t); o.stop(t + 0.45);
+  }
+  const api = {
+    rotate: () => blip(620, 0.08, 0.05),
+    hold:   () => blip(440, 0.1, 0.07, 'triangle'),
+    lock:   () => thud(220, 0.3),
+    hard:   () => thud(320, 0.5),
+    pause:  () => blip(330, 0.12, 0.1, 'sine'),
+    clear(n) {
+      melody([523.25, 659.25, 783.99].slice(0, n + 1), 0.09, 'triangle', 0.25);
+    },
+    tetris() {
+      boom();
+      melody([523.25, 659.25, 783.99, [1046.5, 1318.5]], 0.11, 'triangle', 0.32);
+    },
+    levelUp: () => melody([392, 523.25, 659.25], 0.1, 'triangle', 0.22),
+    gameOver: () => melody([392, 329.63, 261.63, 196], 0.2, 'sine', 0.25),
+    toggle() {
+      enabled = !enabled;
+      try { localStorage.setItem('tetris-sound', enabled ? 'on' : 'off'); } catch (e) {}
+      return enabled;
+    },
+    get enabled() { return enabled; },
+  };
+  return api;
+})();
+
+/* ===================== UI ===================== */
+
+const $ = id => document.getElementById(id);
+const canvas = $('board'), ctx = canvas.getContext('2d');
+const holdCv = $('holdCv'), nextCv = $('nextCv');
+const statusEl = $('status'), overlay = $('overlay');
+
+const COLORS = ['', '#5fd3e8', '#6a8df0', '#f0a24e', '#f2d94e', '#7ad96a', '#b57fe0', '#f06a5e'];
+const game = new Game();
+let cell = 24, dpr = 1, bg = null;
+let running = false, paused = false, rafId = null;
+let lastT = 0, acc = 0;
+let groundedSince = null, lockResets = 0;
+const LOCK_DELAY = 500, MAX_RESETS = 15;
+let softKey = false;
+let effects = []; // {type, t0, ...}
+let best = 0;
+try { best = +localStorage.getItem('tetris-best') || 0; } catch (e) {}
+let statusTimer = null;
+
+function setStatus(msg, warn) {
+  statusEl.textContent = msg || ' ';
+  statusEl.classList.toggle('warn', !!warn);
+}
+function flashStatus(msg) {
+  setStatus(msg, true);
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => setStatus(''), 2000);
+}
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const wrap = $('boardWrap');
+  const top = wrap.getBoundingClientRect().top;
+  const availH = Math.max(260, window.innerHeight - top - 70);
+  const availW = Math.min(wrap.clientWidth, 400);
+  cell = Math.max(12, Math.floor(Math.min(availW / W, availH / (H - HIDDEN))));
+  canvas.style.width = cell * W + 'px';
+  canvas.style.height = cell * (H - HIDDEN) + 'px';
+  canvas.width = Math.round(cell * W * dpr);
+  canvas.height = Math.round(cell * (H - HIDDEN) * dpr);
+  buildBg();
+  sizeMini(holdCv, 56, 44);
+  sizeMini(nextCv, 132, 44);
+  drawMinis();
+  render(performance.now());
+}
+function sizeMini(cv, w, h) {
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+}
+
+function buildBg() {
+  bg = document.createElement('canvas');
+  bg.width = canvas.width; bg.height = canvas.height;
+  const g = bg.getContext('2d');
+  g.scale(dpr, dpr);
+  const wpx = cell * W, hpx = cell * (H - HIDDEN);
+  const grad = g.createLinearGradient(0, 0, 0, hpx);
+  grad.addColorStop(0, '#141936');
+  grad.addColorStop(1, '#0c0f22');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, wpx, hpx);
+  g.strokeStyle = 'rgba(124,155,255,.07)';
+  g.lineWidth = 1;
+  for (let x = 1; x < W; x++) { g.beginPath(); g.moveTo(x * cell, 0); g.lineTo(x * cell, hpx); g.stroke(); }
+  for (let y = 1; y < H - HIDDEN; y++) { g.beginPath(); g.moveTo(0, y * cell); g.lineTo(wpx, y * cell); g.stroke(); }
+}
+
+// 블록: 클래식한 베벨(밝은 윗면 + 어두운 아랫면)
+function drawBlock(g, px, py, size, idx, alpha, ghost) {
+  const c = COLORS[idx];
+  g.save();
+  g.globalAlpha = alpha;
+  if (ghost) {
+    g.strokeStyle = c;
+    g.lineWidth = 2;
+    g.strokeRect(px + 2, py + 2, size - 4, size - 4);
+  } else {
+    g.fillStyle = c;
+    g.fillRect(px + 1, py + 1, size - 2, size - 2);
+    g.fillStyle = 'rgba(255,255,255,.32)';
+    g.fillRect(px + 1, py + 1, size - 2, Math.max(2, size * 0.16));
+    g.fillRect(px + 1, py + 1, Math.max(2, size * 0.12), size - 2);
+    g.fillStyle = 'rgba(0,0,0,.28)';
+    g.fillRect(px + 1, py + size - 1 - Math.max(2, size * 0.16), size - 2, Math.max(2, size * 0.16));
+  }
+  g.restore();
+}
+
+function render(now) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const wpx = cell * W, hpx = cell * (H - HIDDEN);
+  ctx.clearRect(0, 0, wpx, hpx);
+  if (bg) ctx.drawImage(bg, 0, 0, wpx, hpx);
+
+  for (let y = HIDDEN; y < H; y++) for (let x = 0; x < W; x++) {
+    if (game.grid[y][x]) drawBlock(ctx, x * cell, (y - HIDDEN) * cell, cell, game.grid[y][x], 1);
+  }
+  const p = game.current;
+  if (p && !game.over) {
+    const gy = game.ghostY();
+    if (gy !== p.y) {
+      for (const [cx, cy] of game.cells(p.t, p.r, p.x, gy)) {
+        if (cy >= HIDDEN) drawBlock(ctx, cx * cell, (cy - HIDDEN) * cell, cell, PIECES[p.t].idx, 0.4, true);
+      }
+    }
+    for (const [cx, cy] of game.cells(p.t, p.r, p.x, p.y)) {
+      if (cy >= HIDDEN) drawBlock(ctx, cx * cell, (cy - HIDDEN) * cell, cell, PIECES[p.t].idx, 1);
+    }
+  }
+
+  // 이펙트: 라인 플래시 + 파편
+  effects = effects.filter(e => now - e.t0 < e.dur);
+  for (const e of effects) {
+    const pr = (now - e.t0) / e.dur;
+    if (e.type === 'flash') {
+      ctx.fillStyle = `rgba(255,255,255,${0.75 * (1 - pr)})`;
+      for (const row of e.rows) {
+        if (row >= HIDDEN) ctx.fillRect(0, (row - HIDDEN) * cell, wpx, cell);
+      }
+    } else if (e.type === 'spark') {
+      const t = pr * e.dur / 1000;
+      for (const q of e.parts) {
+        const alpha = 1 - pr;
+        ctx.fillStyle = `hsla(${q.hue},90%,${60 + q.l}%,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(q.x + q.vx * t, q.y + q.vy * t + 500 * t * t, q.r * (1 - pr * 0.6), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  if (paused && !game.over) {
+    ctx.fillStyle = 'rgba(8,10,26,.72)';
+    ctx.fillRect(0, 0, wpx, hpx);
+    ctx.fillStyle = '#e9ecfb';
+    ctx.font = `700 ${Math.max(16, cell)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('일시정지', wpx / 2, hpx / 2);
+  }
+}
+
+function addFlash(rows) { effects.push({ type: 'flash', t0: performance.now(), dur: 230, rows }); }
+function addSparks(rows, big) {
+  const parts = [];
+  for (const row of rows) {
+    const py = (row - HIDDEN + 0.5) * cell;
+    for (let i = 0; i < (big ? 26 : 12); i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 40 + Math.random() * (big ? 240 : 140);
+      parts.push({
+        x: Math.random() * cell * W, y: py,
+        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 60,
+        r: 1.5 + Math.random() * 2, hue: 210 + Math.random() * 60, l: Math.random() * 20,
+      });
+    }
+  }
+  effects.push({ type: 'spark', t0: performance.now(), dur: big ? 900 : 600, parts });
+}
+function quake() {
+  const t0 = performance.now();
+  (function q() {
+    const p = (performance.now() - t0) / 500;
+    if (p >= 1) { canvas.style.transform = ''; return; }
+    const d = (1 - p) ** 2 * 9;
+    canvas.style.transform = `translate(${Math.sin(p * 43) * d}px,${Math.cos(p * 37) * d}px)`;
+    requestAnimationFrame(q);
+  })();
+}
+function nudge() {
+  canvas.style.transform = 'translateY(4px)';
+  setTimeout(() => { canvas.style.transform = ''; }, 70);
+}
+
+function drawMinis() {
+  drawMiniPiece(holdCv, game.hold ? [game.hold] : [], !game.canHold);
+  drawMiniPiece(nextCv, game.queue.slice(0, 3), false);
+}
+function drawMiniPiece(cv, types, dim) {
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = cv.width / dpr, h = cv.height / dpr;
+  g.clearRect(0, 0, w, h);
+  const slot = w / Math.max(1, types.length);
+  types.forEach((t, i) => {
+    const mc = 9;
+    const cells = PIECES[t].rots[0];
+    const xs = cells.map(c => c[0]), ys = cells.map(c => c[1]);
+    const pw = (Math.max(...xs) - Math.min(...xs) + 1) * mc;
+    const ph = (Math.max(...ys) - Math.min(...ys) + 1) * mc;
+    const ox = slot * i + (slot - pw) / 2 - Math.min(...xs) * mc;
+    const oy = (h - ph) / 2 - Math.min(...ys) * mc;
+    for (const [cx, cy] of cells) drawBlock(g, ox + cx * mc, oy + cy * mc, mc, PIECES[t].idx, dim ? 0.35 : 1);
+  });
+}
+
+function updateHud() {
+  $('stateText').textContent = game.over ? '게임 오버' : paused ? '일시정지' : '플레이 중';
+  $('scoreEl').textContent = game.score.toLocaleString();
+  $('levelEl').textContent = game.level;
+  $('linesEl').textContent = game.lines;
+  $('bestEl').textContent = best.toLocaleString();
+  $('pauseBtn').textContent = paused ? '▶' : '⏸';
+  $('pauseBtn').disabled = game.over;
+}
+
+/* ===== 게임 루프 ===== */
+
+function frame(now) {
+  if (!running) return;
+  rafId = requestAnimationFrame(frame);
+  const dt = Math.min(100, now - lastT);
+  lastT = now;
+  if (!paused && !game.over) {
+    const g = softKey ? Math.min(40, gravityMs(game.level) / 20) : gravityMs(game.level);
+    acc += dt;
+    while (acc >= g) {
+      acc -= g;
+      if (game.grounded()) {
+        if (groundedSince == null) groundedSince = now;
+      } else {
+        groundedSince = null;
+        if (softKey) game.softStep(); else game.tryMove(0, 1);
+      }
+    }
+    if (game.grounded() && groundedSince != null && now - groundedSince >= LOCK_DELAY) doLock();
+    handleDAS(now);
+    if (softKey) updateHud(); // 소프트드롭 점수 실시간 반영
+  }
+  render(now);
+}
+
+function afterLock(res) {
+  groundedSince = null; lockResets = 0; acc = 0;
+  if (res.cleared) {
+    addFlash(res.rows);
+    addSparks(res.rows, res.cleared === 4);
+    if (res.cleared === 4) { Sound.tetris(); quake(); flashStatus('테트리스! 🔥 +' + 800 * game.level); }
+    else Sound.clear(res.cleared);
+  } else {
+    Sound.lock();
+  }
+  if (res.levelUp) { Sound.levelUp(); flashStatus('⚡ 레벨 ' + game.level + '! 더 빨라짐'); }
+  updateHud();
+  drawMinis();
+  if (game.over) doGameOver();
+}
+function doLock() { afterLock(game.lockNow()); }
+
+function onMoveReset() {
+  if (game.grounded() && groundedSince != null && lockResets < MAX_RESETS) {
+    groundedSince = performance.now();
+    lockResets++;
+  }
+}
+function doMove(dir) { if (game.tryMove(dir, 0)) onMoveReset(); }
+function doRotate(dir) { if (game.rotate(dir)) { Sound.rotate(); onMoveReset(); } }
+function doHardDrop() {
+  if (!game.current || game.over || paused) return;
+  Sound.hard();
+  nudge();
+  afterLock(game.hardDrop());
+}
+function doHold() {
+  if (paused || game.over) return;
+  if (game.holdSwap()) {
+    Sound.hold();
+    groundedSince = null; lockResets = 0;
+    drawMinis();
+  } else if (!game.canHold) {
+    flashStatus('홀드는 한 번 놓을 때마다 1회!');
+  }
+}
+
+function doGameOver() {
+  Sound.gameOver();
+  let newBest = false;
+  if (game.score > best) {
+    best = game.score;
+    newBest = true;
+    try { localStorage.setItem('tetris-best', String(best)); } catch (e) {}
+  }
+  updateHud();
+  setTimeout(() => {
+    if (!game.over) return;
+    $('modalTitle').textContent = newBest ? '🏆 신기록!' : '게임 오버';
+    $('modalDesc').innerHTML =
+      `점수 <b>${game.score.toLocaleString()}</b> · 레벨 ${game.level} · ${game.lines}줄` +
+      (newBest ? '<br>최고 기록 갱신!' : `<br>최고 기록 ${best.toLocaleString()}`);
+    overlay.classList.remove('hidden');
+    running = false;
+    cancelAnimationFrame(rafId);
+  }, 900);
+}
+
+function newGame() {
+  game.reset(+$('startLevelSel').value);
+  effects = [];
+  canvas.style.transform = '';
+  paused = false;
+  softKey = false;
+  groundedSince = null; lockResets = 0; acc = 0;
+  overlay.classList.add('hidden');
+  setStatus('');
+  updateHud();
+  drawMinis();
+  if (!running) {
+    running = true;
+    lastT = performance.now();
+    rafId = requestAnimationFrame(frame);
+  }
+}
+function togglePause() {
+  if (game.over) return;
+  paused = !paused;
+  if (!paused) { lastT = performance.now(); acc = 0; }
+  Sound.pause();
+  updateHud();
+}
+
+/* ===== 키보드 (DAS: 꾹 누르면 지연 후 연속 이동) ===== */
+
+const keys = { left: 0, right: 0, rep: 0 };
+const DAS = 170, ARR = 40;
+function handleDAS(now) {
+  const t = Math.max(keys.left, keys.right);
+  if (!t) return;
+  const dir = keys.left > keys.right ? -1 : 1;
+  if (now - t > DAS && now - keys.rep >= ARR) { doMove(dir); keys.rep = now; }
+}
+window.addEventListener('keydown', e => {
+  if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON')) return;
+  if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' '].includes(e.key)) e.preventDefault();
+  if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); return; }
+  if (e.repeat || paused || game.over || !running) return;
+  switch (e.key) {
+    case 'ArrowLeft': keys.left = performance.now(); keys.rep = 0; doMove(-1); break;
+    case 'ArrowRight': keys.right = performance.now(); keys.rep = 0; doMove(1); break;
+    case 'ArrowDown': softKey = true; break;
+    case 'ArrowUp': case 'x': case 'X': doRotate(1); break;
+    case 'z': case 'Z': doRotate(-1); break;
+    case ' ': doHardDrop(); break;
+    case 'c': case 'C': case 'Shift': doHold(); break;
+  }
+});
+window.addEventListener('keyup', e => {
+  if (e.key === 'ArrowLeft') keys.left = 0;
+  else if (e.key === 'ArrowRight') keys.right = 0;
+  else if (e.key === 'ArrowDown') softKey = false;
+});
+
+/* ===== 터치: 드래그 이동 / 탭 회전 / 플릭 하드드롭·홀드 ===== */
+
+let ts = null;
+canvas.addEventListener('pointerdown', e => {
+  if (!running || paused || game.over || !game.current) return;
+  canvas.setPointerCapture(e.pointerId);
+  ts = {
+    id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(),
+    pieceX0: game.current.x, dropRef: e.clientY,
+    lastY: e.clientY, lastT: performance.now(), dragged: false,
+  };
+});
+canvas.addEventListener('pointermove', e => {
+  if (!ts || e.pointerId !== ts.id || !game.current || paused || game.over) return;
+  const dx = e.clientX - ts.x0;
+  if (Math.abs(dx) > 14 || Math.abs(e.clientY - ts.y0) > 14) ts.dragged = true;
+  // 가로: 손가락 이동 거리 1셀 폭 = 1칸 (제스처 시작 열 기준으로 스냅)
+  const targetX = ts.pieceX0 + Math.round(dx / cell);
+  let guard = 0;
+  while (game.current.x !== targetX && guard++ < 12) {
+    if (!game.tryMove(targetX > game.current.x ? 1 : -1, 0)) break;
+    onMoveReset();
+  }
+  // 세로: 아래로 1셀 끌 때마다 소프트드롭 1칸
+  while (e.clientY - ts.dropRef > cell) {
+    ts.dropRef += cell;
+    if (game.softStep()) updateHud();
+  }
+  ts.lastY = e.clientY; ts.lastT = performance.now();
+});
+function touchEnd(e) {
+  if (!ts || e.pointerId !== ts.id) return;
+  const t = ts; ts = null;
+  if (paused || game.over || !game.current) return;
+  const now = performance.now();
+  const dt = now - t.t0;
+  const dx = e.clientX - t.x0, dy = e.clientY - t.y0;
+  const segV = (e.clientY - t.lastY) / Math.max(1, now - t.lastT); // 마지막 구간 속도
+  if (!t.dragged && dt < 350) {
+    const rect = canvas.getBoundingClientRect();
+    doRotate((e.clientX - rect.left) < rect.width * 0.25 ? -1 : 1); // 왼쪽 ¼은 반시계
+  } else if (dy > 45 && Math.abs(dy) > Math.abs(dx) && (segV > 0.5 || dy / dt > 0.55)) {
+    doHardDrop();
+  } else if (dy < -45 && Math.abs(dy) > Math.abs(dx) && dy / dt < -0.4) {
+    doHold();
+  }
+}
+canvas.addEventListener('pointerup', touchEnd);
+canvas.addEventListener('pointercancel', () => { ts = null; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+holdCv.addEventListener('click', doHold);
+
+/* ===== 컨트롤 ===== */
+
+$('newBtn').addEventListener('click', newGame);
+$('pauseBtn').addEventListener('click', togglePause);
+$('startLevelSel').addEventListener('change', newGame);
+const soundBtn = $('soundBtn');
+soundBtn.textContent = Sound.enabled ? '🔊' : '🔇';
+soundBtn.addEventListener('click', () => { soundBtn.textContent = Sound.toggle() ? '🔊' : '🔇'; });
+$('modalNew').addEventListener('click', newGame);
+$('modalClose').addEventListener('click', () => overlay.classList.add('hidden'));
+overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
+window.addEventListener('resize', resize);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && running && !paused && !game.over) togglePause();
+});
+
+resize();
+newGame();
+</script>
+</body>
+</html>

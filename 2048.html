@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>2048</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg1:#3d3529;--bg2:#171310;--card:#2b2519;--line:#4a4130;
+  --ink:#f5eee1;--sub:#b3a894;--accent:#edc22e;--warn:#ff7a66;
+}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;
+  background:radial-gradient(1100px 700px at 50% -10%,var(--bg1),var(--bg2));
+  color:var(--ink);min-height:100vh;display:flex;justify-content:center;padding:14px;
+  overflow-x:hidden;overscroll-behavior:none;
+}
+main{width:100%;max-width:640px}
+header{display:flex;align-items:baseline;gap:10px;margin:2px 4px 12px}
+.home{color:var(--sub);text-decoration:none;font-size:15px;padding-right:2px}
+.home:hover{color:var(--ink)}
+h1{font-size:24px;letter-spacing:2px;user-select:none;-webkit-user-select:none}
+.tag{color:var(--sub);font-size:13px}
+.toolbar{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+  background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
+}
+/* 상태/점수 2행 분리 + 폭·높이 고정 (레이아웃 시프트 방지) */
+.info{display:flex;flex-direction:column;gap:3px;width:13.5em;flex:none;overflow:hidden}
+.turn{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;height:22px;white-space:nowrap}
+.dot{width:18px;height:18px;border-radius:5px;flex:none;background:linear-gradient(145deg,#f5d76e,#d4a017);box-shadow:0 1px 3px rgba(0,0,0,.5)}
+#scoreRow{color:var(--sub);font-weight:600;font-size:13px;height:18px;line-height:18px;white-space:nowrap}
+#scoreRow b{color:var(--ink);font-variant-numeric:tabular-nums;display:inline-block;min-width:6.5ch}
+.controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+select,button{
+  font:inherit;font-size:13px;color:var(--ink);background:#3a3122;border:1px solid var(--line);
+  border-radius:8px;padding:7px 10px;cursor:pointer;-webkit-appearance:none;appearance:none;
+}
+select:hover,button:hover{border-color:#6b5c3e}
+button.primary{background:var(--accent);border-color:var(--accent);color:#3a2c05;font-weight:700}
+button:disabled{opacity:.4;cursor:default}
+#status{min-height:22px;font-size:13px;color:var(--sub);margin:8px 6px 6px}
+#status.warn{color:var(--warn);font-weight:600}
+#boardWrap{display:flex;justify-content:center}
+#board{
+  display:block;border-radius:12px;cursor:pointer;
+  box-shadow:0 14px 40px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);
+  touch-action:none;-webkit-tap-highlight-color:transparent;
+}
+.note{color:var(--sub);font-size:12px;text-align:center;margin:12px 0 4px;line-height:1.7}
+#overlay{
+  position:fixed;inset:0;background:rgba(15,11,4,.6);backdrop-filter:blur(3px);
+  display:flex;align-items:center;justify-content:center;z-index:10;
+}
+#overlay.hidden{display:none}
+.modal{
+  background:#352c1c;border:1px solid #5f5030;border-radius:16px;padding:30px 36px;text-align:center;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);animation:pop .2s ease;
+}
+@keyframes pop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+.modal .cube{
+  width:52px;height:52px;margin:0 auto 14px;border-radius:10px;
+  background:#edc22e;color:#f9f6f2;font-weight:800;font-size:15px;
+  display:flex;align-items:center;justify-content:center;
+  animation:winpop .55s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes winpop{from{transform:scale(0)}to{transform:scale(1)}}
+.modal h2{font-size:22px;margin-bottom:6px}
+.modal p{color:var(--sub);font-size:14px;margin-bottom:20px;line-height:1.6}
+.modal .row{display:flex;gap:8px;justify-content:center}
+@media (max-width:520px){.toolbar{justify-content:center}h1{font-size:20px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <a class="home" href="./">←</a>
+    <h1>2048</h1><span class="tag">한 손 퍼즐 · 4×4</span>
+  </header>
+
+  <div class="toolbar">
+    <div class="info">
+      <div class="turn">
+        <span class="dot"></span>
+        <span id="stateText">플레이 중</span>
+      </div>
+      <div id="scoreRow">점수 <b id="scoreEl">0</b> · 최고 <b id="bestEl">0</b></div>
+    </div>
+    <div class="controls">
+      <button id="soundBtn" title="효과음 켜기/끄기">🔊</button>
+      <button id="undoBtn">무르기</button>
+      <button id="newBtn" class="primary">새 게임</button>
+    </div>
+  </div>
+
+  <div id="status">&nbsp;</div>
+  <div id="boardWrap"><canvas id="board"></canvas></div>
+  <p class="note">📱 스와이프 · ⌨️ 방향키/WASD — 모든 타일이 그 방향으로 밀리고, 같은 숫자가 만나면 합체!<br>2048 타일을 만들면 승리 · 무르기는 직전 1수만 · v1</p>
+</main>
+
+<div id="overlay" class="hidden">
+  <div class="modal">
+    <div class="cube" id="modalCube">2048</div>
+    <h2 id="modalTitle">게임 오버</h2>
+    <p id="modalDesc"></p>
+    <div class="row">
+      <button id="modalClose">계속하기</button>
+      <button id="modalNew" class="primary">새 게임</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ===================== 게임 로직 (렌더링과 분리) ===================== */
+
+const N4 = 4;
+
+class Game {
+  constructor(rng) { this.rng = rng || Math.random; this.reset(); }
+  reset() {
+    this.grid = Array.from({ length: N4 }, () => new Array(N4).fill(0));
+    this.score = 0;
+    this.won = false;      // 2048 달성 여부 (달성 후 계속 플레이 가능)
+    this.justWon = false;  // 이번 수에 처음 달성 (UI 소비용)
+    this.over = false;
+    this.prev = null;      // 무르기용 직전 상태 (1수)
+    this.lastEvents = null;
+    this.lastMerged = null;
+    this.lastSpawn = null;
+    this.addTile();
+    this.addTile();
+  }
+  empties() {
+    const out = [];
+    for (let y = 0; y < N4; y++) for (let x = 0; x < N4; x++) if (!this.grid[y][x]) out.push([x, y]);
+    return out;
+  }
+  addTile() {
+    const e = this.empties();
+    if (!e.length) return;
+    const [x, y] = e[Math.floor(this.rng() * e.length)];
+    const v = this.rng() < 0.9 ? 2 : 4;
+    this.grid[y][x] = v;
+    this.lastSpawn = { x, y, v };
+  }
+  canMove() {
+    for (let y = 0; y < N4; y++) for (let x = 0; x < N4; x++) {
+      const v = this.grid[y][x];
+      if (!v) return true;
+      if (x + 1 < N4 && this.grid[y][x + 1] === v) return true;
+      if (y + 1 < N4 && this.grid[y + 1][x] === v) return true;
+    }
+    return false;
+  }
+  // dir: 0=왼 1=오른 2=위 3=아래. 성공 시 이동 이벤트를 기록하고 true.
+  move(dir) {
+    if (this.over) return false;
+    const snapshot = { grid: this.grid.map(r => r.slice()), score: this.score };
+    const events = [], merged = [];
+    let moved = false;
+    for (let i = 0; i < N4; i++) {
+      // 밀리는 방향 순서대로 좌표 나열 (coords[0]이 도착 끝)
+      const coords = [];
+      for (let j = 0; j < N4; j++) {
+        if (dir === 0) coords.push([j, i]);
+        else if (dir === 1) coords.push([N4 - 1 - j, i]);
+        else if (dir === 2) coords.push([i, j]);
+        else coords.push([i, N4 - 1 - j]);
+      }
+      const cells = [];
+      coords.forEach(([x, y], idx) => { if (this.grid[y][x]) cells.push({ v: this.grid[y][x], idx }); });
+      // 압축 + 인접 동일값 1회 병합 (이중 병합 금지)
+      const outVals = new Array(N4).fill(0);
+      let t = 0, k = 0;
+      while (k < cells.length) {
+        if (k + 1 < cells.length && cells[k].v === cells[k + 1].v) {
+          const nv = cells[k].v * 2;
+          outVals[t] = nv;
+          this.score += nv;
+          events.push({ f: coords[cells[k].idx], t: coords[t], v: cells[k].v });
+          events.push({ f: coords[cells[k + 1].idx], t: coords[t], v: cells[k + 1].v });
+          merged.push({ x: coords[t][0], y: coords[t][1], v: nv });
+          if (nv === 2048 && !this.won) { this.won = true; this.justWon = true; }
+          k += 2;
+        } else {
+          outVals[t] = cells[k].v;
+          events.push({ f: coords[cells[k].idx], t: coords[t], v: cells[k].v });
+          k++;
+        }
+        t++;
+      }
+      coords.forEach(([x, y], idx) => {
+        if (this.grid[y][x] !== outVals[idx]) moved = true;
+        this.grid[y][x] = outVals[idx];
+      });
+    }
+    if (!moved) return false;
+    this.prev = snapshot;
+    this.addTile();
+    this.lastEvents = events;
+    this.lastMerged = merged;
+    if (!this.canMove()) this.over = true;
+    return true;
+  }
+  undo() {
+    if (!this.prev) return false;
+    this.grid = this.prev.grid;
+    this.score = this.prev.score;
+    this.prev = null;
+    this.over = false;
+    return true;
+  }
+}
+
+/* ===================== 사운드 (Web Audio 합성) ===================== */
+
+const Sound = (() => {
+  let ac = null, master = null;
+  let enabled = true;
+  try { enabled = localStorage.getItem('2048-sound') !== 'off'; } catch (e) {}
+
+  function ctx() {
+    if (!ac) {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      master = ac.createGain();
+      master.gain.value = 0.65;
+      const comp = ac.createDynamicsCompressor();
+      comp.threshold.value = -12; comp.knee.value = 20; comp.ratio.value = 8;
+      comp.attack.value = 0.002; comp.release.value = 0.15;
+      master.connect(comp).connect(ac.destination);
+    }
+    if (ac.state === 'suspended') ac.resume();
+    return ac;
+  }
+  function env(node, t, vol, dur) {
+    const g = ac.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    node.connect(g).connect(master);
+  }
+
+  // 슬라이드: 짧은 "슉" (하이패스 노이즈)
+  function slide() {
+    if (!enabled) return;
+    const a = ctx(), t = a.currentTime;
+    const n = Math.round(a.sampleRate * 0.06);
+    const buf = a.createBuffer(1, n, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / n);
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    const hp = a.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 1800;
+    src.connect(hp);
+    env(hp, t, 0.12, 0.07);
+    src.start(t);
+  }
+
+  // 합체음: 타일 등급이 오를수록 펜타토닉 스케일을 타고 음이 올라감
+  const PENTA = [0, 2, 4, 7, 9];
+  function mergeTone(v, when) {
+    if (!enabled) return;
+    const a = ctx(), t = a.currentTime + (when || 0);
+    const rank = Math.log2(v) - 2; // 4→0, 8→1, 16→2 ...
+    const semis = Math.floor(rank / 5) * 12 + PENTA[((rank % 5) + 5) % 5];
+    const f = 262 * Math.pow(2, semis / 12);
+    const o = a.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    env(o, t, 0.22, 0.22);
+    o.start(t); o.stop(t + 0.24);
+    if (v >= 128) { // 큰 타일은 옥타브 위 반짝이 추가
+      const o2 = a.createOscillator();
+      o2.type = 'sine';
+      o2.frequency.value = f * 2;
+      env(o2, t + 0.02, 0.1, 0.3);
+      o2.start(t + 0.02); o2.stop(t + 0.34);
+    }
+  }
+  function merges(vals) {
+    vals.slice().sort((a, b) => a - b).forEach((v, i) => mergeTone(v, i * 0.07));
+  }
+
+  function boom() {
+    if (!enabled) return;
+    const a = ctx(), t = a.currentTime;
+    const o = a.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+    const sh = a.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) curve[i] = Math.tanh((i / 128 - 1) * 4);
+    sh.curve = curve;
+    o.connect(sh);
+    env(sh, t, 0.9, 0.4);
+    o.start(t); o.stop(t + 0.45);
+  }
+  function melody(steps, dur, type, vol) {
+    if (!enabled) return;
+    const a = ctx(), t0 = a.currentTime;
+    steps.forEach((s, i) => {
+      const freqs = Array.isArray(s) ? s : [s];
+      const t = t0 + i * dur;
+      const ring = (i === steps.length - 1 ? 4 : 1.8) * dur;
+      for (const f of freqs) {
+        const o = a.createOscillator();
+        o.type = type; o.frequency.value = f;
+        env(o, t, vol / Math.sqrt(freqs.length), ring);
+        o.start(t); o.stop(t + ring + 0.05);
+      }
+    });
+  }
+  const api = {
+    slide, merges, boom,
+    win: () => melody([523.25, 659.25, 783.99, [1046.5, 1318.5, 1568]], 0.13, 'triangle', 0.34),
+    lose: () => melody([392, 329.63, 261.63, 196], 0.2, 'sine', 0.25),
+    undoS: () => { if (enabled) melody([330, 262], 0.09, 'sine', 0.15); },
+    toggle() {
+      enabled = !enabled;
+      try { localStorage.setItem('2048-sound', enabled ? 'on' : 'off'); } catch (e) {}
+      return enabled;
+    },
+    get enabled() { return enabled; },
+  };
+  return api;
+})();
+
+/* ===================== UI ===================== */
+
+const $ = id => document.getElementById(id);
+const canvas = $('board'), ctx = canvas.getContext('2d');
+const statusEl = $('status'), overlay = $('overlay');
+
+// 클래식 2048 팔레트 [배경, 글자]
+const TILE = {
+  2:   ['#eee4da', '#776e65'], 4:    ['#ede0c8', '#776e65'], 8:    ['#f2b179', '#f9f6f2'],
+  16:  ['#f59563', '#f9f6f2'], 32:   ['#f67c5f', '#f9f6f2'], 64:   ['#f65e3b', '#f9f6f2'],
+  128: ['#edcf72', '#f9f6f2'], 256:  ['#edcc61', '#f9f6f2'], 512:  ['#edc850', '#f9f6f2'],
+  1024:['#edc53f', '#f9f6f2'], 2048: ['#edc22e', '#f9f6f2'],
+};
+const TILE_BIG = ['#3c3a32', '#f9f6f2']; // 4096 이상
+
+const game = new Game();
+let boardPx = 0, pad = 12, gap = 10, cell = 0, dpr = 1;
+let best = 0;
+try { best = +localStorage.getItem('2048-best') || 0; } catch (e) {}
+let statusTimer = null;
+let milestone = 128; // 이 값 이상 처음 만들면 축하 메시지
+
+/* ===== 연출 엔진: 살아있을 때만 rAF ===== */
+
+let anims = [];
+let rafId = null;
+const easeOutCubic = p => 1 - (1 - p) ** 3;
+
+function addAnim(a) {
+  a.t0 = performance.now();
+  a.p = 0;
+  anims.push(a);
+  if (rafId == null) rafId = requestAnimationFrame(animTick);
+}
+function animTick(now) {
+  const alive = [];
+  for (const a of anims) {
+    a.p = Math.min(1, (now - a.t0) / a.dur);
+    if (a.p < 1) alive.push(a);
+    else if (a.onEnd) a.onEnd();
+  }
+  anims = alive;
+  render(now);
+  rafId = anims.length ? requestAnimationFrame(animTick) : null;
+  if (!anims.length) render(performance.now());
+}
+function clearAnims() {
+  anims = [];
+  slideAnim = null;
+  canvas.style.transform = '';
+}
+
+let slideAnim = null; // {events, merged, spawn} + p
+const SLIDE_MS = 115, POP_MS = 130;
+
+function startMoveAnim() {
+  const a = {
+    type: 'slide', dur: SLIDE_MS + POP_MS,
+    events: game.lastEvents, merged: game.lastMerged, spawn: game.lastSpawn,
+  };
+  a.onEnd = () => { if (slideAnim === a) slideAnim = null; };
+  slideAnim = a;
+  addAnim(a);
+}
+function quake() {
+  addAnim({ type: 'quake', dur: 600, onEnd: () => { canvas.style.transform = ''; } });
+}
+function confetti() {
+  const parts = [];
+  for (let i = 0; i < 70; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const sp = 60 + Math.random() * 260;
+    parts.push({
+      x: boardPx / 2 + (Math.random() - 0.5) * boardPx * 0.4,
+      y: boardPx / 2 + (Math.random() - 0.5) * boardPx * 0.4,
+      vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 80,
+      r: 1.5 + Math.random() * 2.5, hue: 38 + Math.random() * 22, l: Math.random() * 20,
+      life: 0.7 + Math.random() * 0.6,
+    });
+  }
+  addAnim({ type: 'confetti', dur: 1600, parts });
+}
+
+/* ===== 렌더링 ===== */
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  const wrap = $('boardWrap');
+  boardPx = Math.min(wrap.clientWidth, 400);
+  pad = Math.round(boardPx * 0.032);
+  gap = Math.round(boardPx * 0.028);
+  cell = (boardPx - pad * 2 - gap * (N4 - 1)) / N4;
+  canvas.style.width = boardPx + 'px';
+  canvas.style.height = boardPx + 'px';
+  canvas.width = Math.round(boardPx * dpr);
+  canvas.height = Math.round(boardPx * dpr);
+  render(performance.now());
+}
+function cellPos(gx, gy) { return [pad + gx * (cell + gap), pad + gy * (cell + gap)]; }
+
+function rr(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+function drawTile(gx, gy, v, scale) {
+  const [px, py] = cellPos(gx, gy);
+  drawTileAt(px, py, v, scale);
+}
+function drawTileAt(px, py, v, scale) {
+  const s = scale == null ? 1 : scale;
+  if (s <= 0.02) return;
+  const size = cell * s, off = (cell - size) / 2;
+  const [bg, fg] = TILE[v] || TILE_BIG;
+  ctx.fillStyle = bg;
+  rr(ctx, px + off, py + off, size, size, Math.max(3, size * 0.07));
+  ctx.fill();
+  const digits = String(v).length;
+  const fs = size * (digits <= 2 ? 0.5 : digits === 3 ? 0.42 : digits === 4 ? 0.34 : 0.28);
+  ctx.fillStyle = fg;
+  ctx.font = `800 ${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(v), px + off + size / 2, py + off + size / 2 + fs * 0.05);
+}
+
+function render(now) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, boardPx, boardPx);
+  // 보드판 + 빈 슬롯
+  ctx.fillStyle = '#bbada0';
+  rr(ctx, 0, 0, boardPx, boardPx, 12);
+  ctx.fill();
+  ctx.fillStyle = '#cdc1b4';
+  for (let y = 0; y < N4; y++) for (let x = 0; x < N4; x++) {
+    const [px, py] = cellPos(x, y);
+    rr(ctx, px, py, cell, cell, Math.max(3, cell * 0.07));
+    ctx.fill();
+  }
+
+  const sa = slideAnim;
+  if (sa) {
+    const el = sa.p * sa.dur;
+    if (el < SLIDE_MS) {
+      // 1단계: 타일이 목적지로 미끄러짐 (병합 전 값으로)
+      const p = easeOutCubic(el / SLIDE_MS);
+      for (const ev of sa.events) {
+        const [fx, fy] = cellPos(ev.f[0], ev.f[1]);
+        const [tx, ty] = cellPos(ev.t[0], ev.t[1]);
+        drawTileAt(fx + (tx - fx) * p, fy + (ty - fy) * p, ev.v);
+      }
+    } else {
+      // 2단계: 확정 그리드 + 합체 팝 + 새 타일 등장
+      const p2 = Math.min(1, (el - SLIDE_MS) / POP_MS);
+      const mergedSet = new Set((sa.merged || []).map(m => m.x + ',' + m.y));
+      const spawnKey = sa.spawn ? sa.spawn.x + ',' + sa.spawn.y : '';
+      for (let y = 0; y < N4; y++) for (let x = 0; x < N4; x++) {
+        const v = game.grid[y][x];
+        if (!v) continue;
+        const key = x + ',' + y;
+        let s = 1;
+        if (key === spawnKey) s = easeOutCubic(p2);
+        else if (mergedSet.has(key)) s = 1 + 0.22 * Math.sin(Math.PI * p2);
+        drawTile(x, y, v, s);
+      }
+    }
+  } else {
+    for (let y = 0; y < N4; y++) for (let x = 0; x < N4; x++) {
+      if (game.grid[y][x]) drawTile(x, y, game.grid[y][x]);
+    }
+  }
+
+  // 오버레이 연출
+  for (const a of anims) {
+    if (a.type === 'confetti') {
+      const t = a.p * a.dur / 1000;
+      for (const q of a.parts) {
+        const alpha = 1 - t / q.life;
+        if (alpha <= 0) continue;
+        ctx.fillStyle = `hsla(${q.hue},92%,${52 + q.l}%,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(q.x + q.vx * t, q.y + q.vy * t + 420 * t * t, q.r * (0.4 + 0.6 * alpha), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (a.type === 'quake') {
+      const decay = (1 - a.p) ** 2;
+      const A = 10 * decay;
+      canvas.style.transform =
+        `translate(${Math.sin(a.p * 43) * A}px,${Math.cos(a.p * 37) * A * 0.8}px) rotate(${Math.sin(a.p * 29) * 0.4 * decay}deg)`;
+      if (a.p < 0.25) {
+        ctx.fillStyle = `rgba(255,215,90,${0.2 * (1 - a.p / 0.25)})`;
+        rr(ctx, 0, 0, boardPx, boardPx, 12);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+/* ===== HUD / 상태 ===== */
+
+function setStatus(msg, warn) {
+  statusEl.textContent = msg || ' ';
+  statusEl.classList.toggle('warn', !!warn);
+}
+function flashStatus(msg) {
+  setStatus(msg, true);
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => setStatus(''), 2200);
+}
+function updateHud() {
+  $('stateText').textContent = game.over ? '게임 오버' : game.won ? '2048 달성 · 계속' : '플레이 중';
+  $('scoreEl').textContent = game.score.toLocaleString();
+  if (game.score > best) {
+    best = game.score;
+    try { localStorage.setItem('2048-best', String(best)); } catch (e) {}
+  }
+  $('bestEl').textContent = best.toLocaleString();
+  $('undoBtn').disabled = !game.prev;
+}
+
+/* ===== 조작 ===== */
+
+function doMove(dir) {
+  if (game.over) return;
+  // 연타 허용: 슬라이드가 어느 정도 진행됐으면 즉시 확정하고 다음 수
+  if (slideAnim && slideAnim.p * slideAnim.dur < 70) return;
+  slideAnim = null;
+  if (!game.move(dir)) return;
+  Sound.slide();
+  const merged = game.lastMerged || [];
+  if (merged.length) Sound.merges(merged.map(m => m.v));
+  startMoveAnim();
+  // 첫 달성 마일스톤 축하
+  const maxMerged = merged.reduce((m, c) => Math.max(m, c.v), 0);
+  if (maxMerged >= milestone && maxMerged < 2048) {
+    flashStatus('✨ ' + maxMerged + ' 달성!');
+    milestone = maxMerged * 2;
+  }
+  updateHud();
+  if (game.justWon) {
+    game.justWon = false;
+    setTimeout(() => {
+      Sound.boom(); Sound.win(); quake(); confetti();
+      setTimeout(() => showModal(true), 700);
+    }, SLIDE_MS + POP_MS);
+  } else if (game.over) {
+    setTimeout(() => { Sound.lose(); showModal(false); }, 500);
+  }
+}
+
+function showModal(won) {
+  const c = $('modalCube');
+  if (won) {
+    c.textContent = '2048';
+    c.style.background = '#edc22e';
+    $('modalTitle').textContent = '🎉 2048 달성!';
+    $('modalDesc').innerHTML = `점수 <b>${game.score.toLocaleString()}</b><br>여기서 멈추지 않아도 됨 — 4096 가보자`;
+    $('modalClose').textContent = '계속하기';
+  } else {
+    const mx = Math.max(...game.grid.flat());
+    c.textContent = String(mx);
+    const [bgc] = TILE[mx] || TILE_BIG;
+    c.style.background = bgc;
+    const nb = game.score >= best && best > 0;
+    $('modalTitle').textContent = nb ? '🏆 신기록!' : '게임 오버';
+    $('modalDesc').innerHTML = `점수 <b>${game.score.toLocaleString()}</b> · 최대 타일 ${mx}<br>최고 기록 ${best.toLocaleString()}`;
+    $('modalClose').textContent = '판 보기';
+  }
+  overlay.classList.remove('hidden');
+}
+
+function doUndo() {
+  if (game.undo()) {
+    Sound.undoS();
+    clearAnims();
+    overlay.classList.add('hidden');
+    updateHud();
+    render(performance.now());
+  }
+}
+function newGame() {
+  game.reset();
+  milestone = 128;
+  clearAnims();
+  overlay.classList.add('hidden');
+  setStatus('');
+  updateHud();
+  render(performance.now());
+}
+
+// 키보드
+window.addEventListener('keydown', e => {
+  if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON')) return;
+  const map = {
+    ArrowLeft: 0, a: 0, A: 0, ArrowRight: 1, d: 1, D: 1,
+    ArrowUp: 2, w: 2, W: 2, ArrowDown: 3, s: 3, S: 3,
+  };
+  if (map[e.key] !== undefined) { e.preventDefault(); doMove(map[e.key]); }
+});
+
+// 스와이프
+let sw = null;
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  sw = { id: e.pointerId, x0: e.clientX, y0: e.clientY };
+});
+canvas.addEventListener('pointerup', e => {
+  if (!sw || e.pointerId !== sw.id) return;
+  const dx = e.clientX - sw.x0, dy = e.clientY - sw.y0;
+  sw = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  if (Math.abs(dx) > Math.abs(dy)) doMove(dx > 0 ? 1 : 0);
+  else doMove(dy > 0 ? 3 : 2);
+});
+canvas.addEventListener('pointercancel', () => { sw = null; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+$('newBtn').addEventListener('click', newGame);
+$('undoBtn').addEventListener('click', doUndo);
+const soundBtn = $('soundBtn');
+soundBtn.textContent = Sound.enabled ? '🔊' : '🔇';
+soundBtn.addEventListener('click', () => { soundBtn.textContent = Sound.toggle() ? '🔊' : '🔇'; });
+$('modalNew').addEventListener('click', newGame);
+$('modalClose').addEventListener('click', () => overlay.classList.add('hidden'));
+overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
+window.addEventListener('resize', resize);
+
+resize();
+updateHud();
+</script>
+</body>
+</html>

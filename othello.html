@@ -26,14 +26,15 @@ h1{font-size:24px;letter-spacing:2px;user-select:none;-webkit-user-select:none}
   display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
   background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
 }
-.turn{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px}
-/* 생각 중 문구가 길어져도 레이아웃이 안 흔들리게 자리 예약 */
-#turnText{display:inline-flex;align-items:center;gap:2px;min-width:8.6em;white-space:nowrap}
+/* 턴 표시와 스코어를 별도 행으로 분리 + 폭/높이 완전 고정 → 내용이 바뀌어도 레이아웃 불변 */
+.info{display:flex;flex-direction:column;gap:3px;width:11em;flex:none;overflow:hidden}
+.turn{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;height:22px;white-space:nowrap}
+#turnText{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
 .dot{width:18px;height:18px;border-radius:50%;flex:none;box-shadow:0 1px 3px rgba(0,0,0,.5)}
 .dot.black{background:radial-gradient(circle at 35% 30%,#777,#000)}
 .dot.white{background:radial-gradient(circle at 35% 30%,#fff,#b9b6aa)}
 .dot.draw{background:linear-gradient(135deg,#555,#ddd)}
-#score{color:var(--sub);font-weight:600;font-size:14px;white-space:nowrap}
+#score{color:var(--sub);font-weight:600;font-size:14px;height:18px;line-height:18px;white-space:nowrap}
 /* 점수가 한 자리→두 자리로 바뀌어도 폭 고정 (최대 64라 2ch면 충분) */
 #score b{color:var(--ink);display:inline-block;min-width:2ch;font-variant-numeric:tabular-nums}
 #scoreB{text-align:right}
@@ -86,10 +87,12 @@ canvas{
   </header>
 
   <div class="toolbar">
-    <div class="turn">
-      <span id="turnDot" class="dot black"></span>
-      <span id="turnText">흑 차례</span>
-      <span id="score">● <b id="scoreB">2</b> : <b id="scoreW">2</b> ○</span>
+    <div class="info">
+      <div class="turn">
+        <span id="turnDot" class="dot black"></span>
+        <span id="turnText">흑 차례</span>
+      </div>
+      <div id="score">● <b id="scoreB">2</b> : <b id="scoreW">2</b> ○</div>
     </div>
     <div class="controls">
       <select id="modeSel" title="대전 모드">
@@ -114,7 +117,7 @@ canvas{
 
   <div id="status">&nbsp;</div>
   <div id="boardWrap"><canvas id="board"></canvas></div>
-  <p class="note">흑 선공 · 상대 돌을 끼우면 전부 뒤집힘 · 둘 곳 없으면 자동 패스 · 최종 돌 수로 승부 · v3</p>
+  <p class="note">흑 선공 · 상대 돌을 끼우면 전부 뒤집힘 · 둘 곳 없으면 자동 패스 · 최종 돌 수로 승부 · v4</p>
 </main>
 
 <div id="overlay" class="hidden">

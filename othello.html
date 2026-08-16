@@ -26,6 +26,8 @@ h1{font-size:24px;letter-spacing:2px;user-select:none;-webkit-user-select:none}
   background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;
 }
 .turn{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px}
+/* 생각 중 문구가 길어져도 레이아웃이 안 흔들리게 자리 예약 */
+#turnText{display:inline-flex;align-items:center;gap:2px;min-width:8.6em;white-space:nowrap}
 .dot{width:18px;height:18px;border-radius:50%;flex:none;box-shadow:0 1px 3px rgba(0,0,0,.5)}
 .dot.black{background:radial-gradient(circle at 35% 30%,#777,#000)}
 .dot.white{background:radial-gradient(circle at 35% 30%,#fff,#b9b6aa)}
@@ -370,17 +372,17 @@ const Sound = (() => {
     o.start(t); o.stop(t + 0.1);
   }
 
-  // 뒤집기 연쇄: 돌 수만큼 음정이 올라가는 틱틱틱
+  // 뒤집기 연쇄: 돌 수만큼 음정이 올라가는 틱틱틱 (플립 애니메이션 박자에 동기화)
   function flips(count) {
     if (!enabled || !count) return;
     const a = ctx(), t0 = a.currentTime;
     for (let i = 0; i < Math.min(count, 12); i++) {
       const o = a.createOscillator();
       o.type = 'triangle';
-      o.frequency.value = 480 + i * 55;
-      const t = t0 + 0.06 + i * 0.055;
-      env(o, t, 0.16, 0.09);
-      o.start(t); o.stop(t + 0.1);
+      o.frequency.value = 480 + i * 45;
+      const t = t0 + 0.32 + i * 0.13; // 각 돌이 절반쯤 뒤집히는 시점
+      env(o, t, 0.16, 0.12);
+      o.start(t); o.stop(t + 0.13);
     }
   }
 
@@ -606,18 +608,25 @@ function animatePlace(gx, gy, flipsArr) {
   const drop = { type: 'drop', dur: 180, onEnd: () => dropping.delete(key) };
   dropping.set(key, drop);
   addAnim(drop);
-  // 뒤집기: 착수점에서 가까운 순서로 스태거
+  // 뒤집기: 착수점에서 가까운 순서로, 클래식하게 천천히 스태거
   const sorted = flipsArr.slice().sort((a, b) =>
     Math.max(Math.abs(a[0] - gx), Math.abs(a[1] - gy)) - Math.max(Math.abs(b[0] - gx), Math.abs(b[1] - gy)));
   flipMap.clear();
   let maxDelay = 0;
   sorted.forEach(([fx, fy], i) => {
-    const delay = 70 + i * 55;
+    const delay = 100 + i * 130;
     flipMap.set(fx + ',' + fy, { delay });
     maxDelay = delay;
   });
-  flipAnim = { type: 'flip', dur: maxDelay + 300, onEnd: () => { flipMap.clear(); flipAnim = null; } };
-  addAnim(flipAnim);
+  const fa = { type: 'flip', dur: maxDelay + 500 };
+  fa.onEnd = () => { if (flipAnim === fa) { flipMap.clear(); flipAnim = null; } }; // 새 플립이 시작됐으면 건드리지 않음
+  flipAnim = fa;
+  addAnim(fa);
+}
+
+// 뒤집기 연쇄가 끝날 때까지 걸리는 시간 (AI 응답 최소 대기용)
+function cascadeMs(n) {
+  return n ? 100 + (n - 1) * 130 + 550 : 0;
 }
 
 function animateEnd() {
@@ -689,7 +698,7 @@ function render() {
       drawDisc(x, y, c, 0.6 + 0.4 * e, 1, 1.3 - 0.3 * e);
     } else if (f) {
       const el = flipAnim.p * flipAnim.dur;
-      const lp = Math.min(1, Math.max(0, (el - f.delay) / 280));
+      const lp = Math.min(1, Math.max(0, (el - f.delay) / 450));
       const sx = Math.abs(Math.cos(Math.PI * lp));
       drawDisc(x, y, lp < 0.5 ? 3 - c : c, 1, Math.max(sx, 0.05));
     } else {
@@ -812,7 +821,7 @@ function attemptMove(x, y) {
   Sound.flips(res.flips.length);
   animatePlace(x, y, res.flips);
   announcePass();
-  afterMove();
+  afterMove(cascadeMs(res.flips.length)); // AI는 뒤집기 연출이 끝난 뒤에 응답
 }
 
 function aiDelay() {
@@ -834,14 +843,14 @@ function finishGame() {
   setTimeout(showModal, 1250);
 }
 
-function afterMove() {
+function afterMove(extraDelay) {
   render();
   updateHud();
   if (game.winner) { finishGame(); return; }
-  maybeAiTurn();
+  maybeAiTurn(extraDelay);
 }
 
-function maybeAiTurn() {
+function maybeAiTurn(minDelay) {
   if (mode !== 'ai' || game.winner || game.current === humanColor) return;
   aiThinking = true;
   updateHud();
@@ -850,6 +859,7 @@ function maybeAiTurn() {
     if (gen !== game.gen) return;
     const m = AI.findBestMove(game, difficulty, difficulty === 'master');
     aiThinking = false;
+    let cascade = 0;
     if (m) {
       const res = game.tryPlace(m.x, m.y);
       if (res.ok) {
@@ -857,13 +867,14 @@ function maybeAiTurn() {
         Sound.flips(res.flips.length);
         animatePlace(m.x, m.y, res.flips);
         announcePass();
+        cascade = cascadeMs(res.flips.length);
       }
     }
     render();
     updateHud();
     if (game.winner) { finishGame(); return; }
-    maybeAiTurn(); // 사람이 패스당했으면 AI가 연속으로 둠
-  }, aiDelay());
+    maybeAiTurn(cascade); // 사람이 패스당했으면 AI가 연출 끝난 뒤 연속으로 둠
+  }, Math.max(aiDelay(), minDelay || 0));
 }
 
 function doUndo() {
